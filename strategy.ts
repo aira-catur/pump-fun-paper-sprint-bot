@@ -12,7 +12,7 @@
 // the last 20 slots (the fade exit was worth more than 1 SOL of dev PnL on its own).
 //
 // So the bot does exactly two things:
-//  1. Rider trades: one fixed 0.55 SOL buy (never more: adding to winners and re-entering coins
+//  1. Rider trades: one fixed 0.4 SOL buy (never more: adding to winners and re-entering coins
 //     both lost money in testing) when a curve's real reserve sits in [55, 84] SOL, was seen
 //     below 55 SOL within the last 400 slots (we ride coins we watched climb into the band,
 //     not coins that merely sit in it), with
@@ -27,8 +27,10 @@
 //     block time so 26 distinct coins are covered in the first hour. A probe costs roughly
 //     0.0005 SOL of fees; the rider book is what has to earn it back.
 //
-// Sizing note: a buy is capped at 1% of the coin's real reserve per reply, so 0.55 SOL is
-// exactly the cap at the bottom of the entry band and below it everywhere above.
+// Sizing note: a buy is capped at 1% of the coin's real reserve per reply (0.55 SOL at the
+// bottom of the entry band), so a 0.4 SOL stake is never size-capped in the band. The stake
+// was set at 0.4 rather than the 0.55 the cap allows: dev PnL scales linearly with stake, and
+// the smaller stake keeps the loss on a window where the completion dynamic fails near 1 SOL.
 // Everything is a pure function of the hello/batch stream: no clock, no randomness, no I/O, so
 // the two graded executions produce byte-identical orders.
 
@@ -48,7 +50,7 @@ const MAX_PRICE_UP = 3; // skip a window that already ran more than +300%
 const MAX_BUYER_SHARE = 0.6; // one wallet may not be most of the window's buy SOL
 const CROSS_WINDOW = 400; // the reserve must have been seen below MIN_RQ_SOL within this many slots
 // Position.
-const STAKE_SOL = 0.55;
+const STAKE_SOL = 0.4;
 const MIN_BUY_SOL = 0.01;
 const BUY_SLIP_BPS = 1500;
 const MAX_MAIN = 4;
