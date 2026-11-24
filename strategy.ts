@@ -13,7 +13,9 @@
 //
 // So the bot does exactly two things:
 //  1. Rider trades: one fixed 0.55 SOL buy (never more: adding to winners and re-entering coins
-//     both lost money in testing) when a curve's real reserve first sits in [55, 84] SOL with
+//     both lost money in testing) when a curve's real reserve sits in [55, 84] SOL, was seen
+//     below 55 SOL within the last 400 slots (we ride coins we watched climb into the band,
+//     not coins that merely sit in it), with
 //     the price near its 40-slot high and at least 4 buys from 4 distinct wallets in the window
 //     (so it is a traded curve, not one wallet pushing it). Sold whole on the stop, the fade, or
 //     after 3,000 slots unless it is up at least 5%; a curve that completes is closed by the
@@ -44,6 +46,7 @@ const MIN_BUYERS = 4;
 const NEAR_HIGH = 0.95; // price at least this share of the window high
 const MAX_PRICE_UP = 3; // skip a window that already ran more than +300%
 const MAX_BUYER_SHARE = 0.6; // one wallet may not be most of the window's buy SOL
+const CROSS_WINDOW = 400; // the reserve must have been seen below MIN_RQ_SOL within this many slots
 // Position.
 const STAKE_SOL = 0.55;
 const MIN_BUY_SOL = 0.01;
@@ -76,6 +79,8 @@ interface Tape {
   trades: Trade[];
   entries: number;
   lastExit: number;
+  /** Last slot a trade showed this curve's real reserve below the entry band (-1: never). */
+  lastBelow: number;
 }
 
 interface Held {
@@ -98,7 +103,7 @@ export function createStrategy(): Bot {
   const tapeOf = (mint: Pubkey): Tape => {
     let t = tapes.get(mint);
     if (t === undefined) {
-      t = { trades: [], entries: 0, lastExit: -1e12 };
+      t = { trades: [], entries: 0, lastExit: -1e12, lastBelow: -1 };
       tapes.set(mint, t);
     }
     return t;
@@ -163,7 +168,9 @@ export function createStrategy(): Bot {
           if (lastTime === null || e.block_time > lastTime) lastTime = e.block_time;
         }
         if (e.event === 'TradeEvent') {
-          tapeOf(e.mint).trades.push({
+          const tape = tapeOf(e.mint);
+          if (Number(e.real_sol_reserves) / LAMPORTS < MIN_RQ_SOL) tape.lastBelow = e.slot;
+          tape.trades.push({
             slot: e.slot,
             buy: e.is_buy,
             sol: Number(e.sol_amount) / LAMPORTS,
@@ -249,6 +256,7 @@ export function createStrategy(): Bot {
         if (held.has(mint) || probes.has(mint) || pendingByMint.has(mint)) continue;
         const t = tapes.get(mint)!;
         if (t.entries >= MAX_ENTRIES || now - t.lastExit < COOLDOWN) continue;
+        if (t.lastBelow < 0 || now - t.lastBelow > CROSS_WINDOW) continue;
         const rqSol = Number(curve.real_quote_reserves) / LAMPORTS;
         if (!entrySignal(t, now, rqSol)) continue;
         const capSol = Math.floor(Number(state.maxBuyLamports(mint))) / LAMPORTS;
